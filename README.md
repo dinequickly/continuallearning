@@ -1,5 +1,7 @@
 # continualcode
 
+> **Status: Unstable** — results will be posted soon
+
 A minimal coding agent that trains itself from your corrections, built on [Tinker](https://thinkingmachines.ai/tinker) and [SDPO](https://self-distillation.github.io/SDPO). It has tools (`read`, `write`, `edit`, `edit_lines`, `glob`, `grep`, `bash`), presents one tool call at a time, and you approve or deny each one. When you deny with a correction, it takes a gradient step on LoRA and retries with updated weights.
 
 When you deny, the same model re-scores its own tokens with your correction as extra context. The logprob difference at each position is a per-token advantage — O(N) bits of signal from one correction, not the O(1) you get from a scalar reward. No separate reward model or critic: the model conditioned on your feedback *is* the teacher ([SDPO](https://self-distillation.github.io/SDPO), Hübotter et al. 2026).
