@@ -4,341 +4,36 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>continualcode</title>
-  <meta name="description" content="Online SDPO for coding agents. Deny, correct, retrain, retry.">
   <style>
-    @font-face {
-      font-family: 'SF Pro Display';
-      src: url('./fonts/SF-Pro-Display-Regular.woff2') format('woff2');
-      font-weight: 400;
-      font-style: normal;
-      font-display: swap;
-    }
-    @font-face {
-      font-family: 'SF Pro Text';
-      src: url('./fonts/SF-Pro-Text-Regular.otf') format('opentype');
-      font-weight: 400;
-      font-style: normal;
-      font-display: swap;
-    }
-    @font-face {
-      font-family: 'SF Pro Text';
-      src: url('./fonts/SF-Pro-Text-Semibold.otf') format('opentype');
-      font-weight: 600;
-      font-style: normal;
-      font-display: swap;
-    }
-
-    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-
-    :root {
-      --fg: #1a1a1a;
-      --fg1: rgba(0,0,0,0.45);
-      --bg1: rgba(0,0,0,0.06);
-      --blue: #0A84FF;
-      --mono: 'SF Mono', SFMono-Regular, ui-monospace, Menlo, Consolas, monospace;
-    }
-
-    body {
-      background: #fff;
-      color: var(--fg);
-      font-family: 'SF Pro Display', 'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
-      font-size: 15px;
-      line-height: 1.7;
-      -webkit-font-smoothing: antialiased;
-    }
-
-    .page {
-      max-width: 600px;
-      margin: 0 auto;
-      padding: 64px 24px 80px;
-    }
-
-    h1 {
-      font-size: 22px;
-      font-weight: 600;
-      margin-bottom: 6px;
-    }
-
-    h2 {
-      font-size: 15px;
-      font-weight: 600;
-      margin-top: 40px;
-      margin-bottom: 12px;
-    }
-
-    p { margin-bottom: 14px; }
-
-    a { color: var(--blue); text-decoration: none; }
-    a:hover { text-decoration: underline; }
-
-    strong { font-weight: 600; }
-    code { font-family: var(--mono); font-size: 13px; background: rgba(0,0,0,0.04); padding: 1px 4px; border-radius: 3px; }
-
-    ul { padding-left: 20px; margin-bottom: 14px; }
-    li { margin-bottom: 4px; }
-    ol { padding-left: 20px; margin-bottom: 14px; }
-    ol li { margin-bottom: 6px; }
-
-    .sub { color: var(--fg1); font-size: 14px; margin-bottom: 20px; }
-    .sub a { color: var(--fg1); }
-    .sub a:hover { color: var(--fg); }
-
-    pre {
-      font-family: var(--mono);
-      font-size: 13px;
-      line-height: 1.55;
-      background: rgba(0,0,0,0.03);
-      border: 1px solid var(--bg1);
-      border-radius: 6px;
-      padding: 12px 14px;
-      overflow-x: auto;
-      margin-bottom: 14px;
-    }
-
-    /* token heatmap — inspired by SDPO blog's dense credit assignment figure */
-    .token-grid {
-      margin: 20px 0;
-      padding: 14px;
-      border-radius: 6px;
-      border: 1px solid var(--bg1);
-      background: rgba(0,0,0,0.015);
-    }
-    .token-grid-label {
-      font-size: 10px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.3px;
-      color: var(--fg1);
-      margin-bottom: 8px;
-    }
-    .token-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 3px;
-      margin-bottom: 10px;
-      font-family: var(--mono);
-      font-size: 12px;
-      line-height: 1;
-    }
-    .token-row:last-child { margin-bottom: 0; }
-    .tk {
-      padding: 3px 5px;
-      border-radius: 3px;
-      white-space: nowrap;
-    }
-    .tk-note {
-      font-size: 10px;
-      font-family: var(--mono);
-      color: var(--fg1);
-      margin-top: 6px;
-    }
-
-    /* table */
-    table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 14px 0; }
-    th { text-align: left; font-weight: 600; font-size: 11px; color: var(--fg1); text-transform: uppercase; letter-spacing: 0.3px; padding: 6px 8px 6px 0; border-bottom: 1px solid var(--bg1); }
-    td { padding: 5px 8px 5px 0; border-bottom: 1px solid var(--bg1); }
-    tr:last-child td { border-bottom: none; }
-    .hl { color: var(--blue); font-weight: 600; }
-    .dm { color: var(--fg1); }
-
-    /* footer */
-    hr { border: none; border-top: 1px solid var(--bg1); margin: 40px 0 16px; }
-    .foot { font-size: 12px; color: var(--fg1); display: flex; gap: 16px; flex-wrap: wrap; }
-    .foot a { color: var(--fg1); }
-    .foot a:hover { color: var(--fg); }
-
-    video {
-      width: 100%;
-      border-radius: 6px;
-      border: 1px solid var(--bg1);
-      margin-bottom: 14px;
-    }
-
-    @media (max-width: 500px) {
-      .page { padding: 40px 16px 60px; }
-      h1 { font-size: 20px; }
-    }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 820px; line-height: 1.6; padding: 0 16px; }
+    h1, h2 { line-height: 1.25; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    pre { background: #f6f8fa; padding: 12px; border-radius: 8px; overflow-x: auto; }
   </style>
 </head>
 <body>
-<div class="page">
-
   <h1>continualcode</h1>
-  <p class="sub"><a href="https://github.com/sdan/continualcode">github</a> &middot; <a href="https://x.com/sdand/status/2020592622415548621">tweet</a> &middot; <a href="./design.md">design doc</a></p>
+  <p>Torch-native SDPO benchmark training with optional Modal-backed train steps.</p>
 
-  <p>A coding agent that updates its own weights from your corrections. Built on <a href="https://thinkingmachines.ai/tinker">Tinker</a> and <a href="https://self-distillation.github.io/SDPO">SDPO</a>, where the model conditioned on your correction becomes its own teacher. You deny a tool call, type what went wrong, gradient step, retry.</p>
+  <h2>Train</h2>
+  <pre>python -m continualcode model_name=Qwen/Qwen3-4B-Instruct-2507</pre>
 
-<pre>pip install continualcode</pre>
+  <h2>Eval</h2>
+  <pre>python -m continualcode.benchmarks.lcb_eval split=test max_samples=100</pre>
 
-  <video src="./continualcode.mp4" autoplay loop muted playsinline></video>
-
-<pre>You: "fix the test"
-Agent: write(test.py, ...)       # overwrites the file
-You: n &rarr; "use edit_lines; don't overwrite"
-  &rarr; SDPO step runs (~2s)
-  &rarr; weights updated, agent retries
-Agent: edit_lines(test.py, 14, 17, ...)
-You: y</pre>
-
-  <h2>How it works</h2>
-
-  <p>The agent has seven tools: <code>read</code>, <code>write</code>, <code>edit</code>, <code>edit_lines</code>, <code>glob</code>, <code>grep</code>, <code>bash</code>. One tool call per turn, so each correction maps to exactly one set of generated tokens.</p>
-
-  <p>Four things can happen at each step:</p>
-
-  <p><strong>Approve</strong> — tool call executes. No training.<br>
-  <strong>Deny with correction</strong> — the main learning event. One gradient step, then retry.<br>
-  <strong>Edit</strong> — you fix the tool call args directly. The diff is the correction signal.<br>
-  <strong>Intermediary feedback</strong> — free-form notes ("this project uses Poetry not pip") that accumulate in session context.</p>
-
-  <h2>Why self-distillation</h2>
-
-  <p>The standard way to train from human feedback is RL: sample a bunch of completions, score them with a reward, update the policy. GRPO samples 64 completions per prompt. Showing a developer 64 tool calls and asking them to pick the best one is not a product.</p>
-
-  <p>The deeper problem is signal density. A scalar reward gives you one bit per episode: good or bad. Every token in the sequence gets the same gradient, whether it was the token that caused the bug or a perfectly fine import statement. That's O(1) bits of learning from each interaction.</p>
-
-  <p><a href="https://self-distillation.github.io/SDPO">SDPO</a> (Hübotter et al. 2026) showed there's a better way. Instead of scoring completions with an external reward, you use the model itself as the teacher. The trick: give the same model your correction as additional context. Now it can re-evaluate every token it generated, knowing what went wrong. The logprob gap between "model with correction" and "model without" is a per-token advantage:</p>
-
-<pre>advantage[t] = teacher_logprob[t] - student_logprob[t]</pre>
-
-  <p>Positive where the teacher agrees more strongly with that token. Negative where it would have done something different. O(N) bits from a single correction.</p>
-
-  <div class="token-grid" id="token-viz">
-    <div class="token-grid-label">GRPO &mdash; scalar reward, same advantage for every token</div>
-    <div class="token-row" id="grpo-tokens"></div>
-    <div class="token-grid-label" style="margin-top: 14px;">SDPO &mdash; per-token advantage from self-teacher</div>
-    <div class="token-row" id="sdpo-tokens"></div>
-    <div class="tk-note">red = teacher disagrees (suppress), blue = teacher agrees more strongly (reinforce)</div>
-  </div>
-
-  <p>This matters because the teacher isn't a separate model. It's the same weights, same architecture — just conditioned on richer context. There's no reward model to train, no critic network, no preference pairs to collect. The model teaches itself by comparing what it knew before your correction to what it knows after.</p>
-
-  <h2>On-policy distillation</h2>
-
-  <p>Why does this work better than just fine-tuning on the corrected output (SFT)?</p>
-
-  <p>SFT minimizes forward KL — it forces the model to assign high probability to the correction data. This is mode-covering: the model has to spread probability mass over all corrections it's seen, even if they conflict with its existing knowledge. Shenfeld and Pari (2025) showed that forward KL between the fine-tuned and base model predicts catastrophic forgetting with R<sup>2</sup> ~ 0.96.</p>
-
-  <p>Self-distillation minimizes reverse KL — mode-seeking. The model only needs to match the teacher on tokens it would actually generate. It can learn the new pattern without flattening out everything else. On-policy means the training data is the model's own completions, not an external dataset. This avoids the compounding distribution mismatch that Agarwal et al. (2023) identified as the core failure mode of off-policy distillation.</p>
-
-  <p>The update uses importance-sampled policy gradients with a KL penalty to the reference adapter:</p>
-
-<pre>is_ratio = π_current(t) / π_old(t)    # clamped [0.5, 2.0]
-loss     = -mean(is_ratio · adv · log π(t)) + β · KL(π_θ ‖ π_ref)</pre>
-
-  <p>Only LoRA parameters get updated. Rank 16, attention projections — about 0.1% of total weights. The low-rank constraint itself prevents catastrophic forgetting: the base model stays frozen, the adapter encodes corrections.</p>
-
-  <h2>Why not DPO / GRPO / PPO / SFT</h2>
-
-  <p><strong>DPO</strong> needs preference pairs. In a CLI you see one tool call, not two.<br>
-  <strong>GRPO</strong> needs 64 samples per prompt. Not a product.<br>
-  <strong>PPO</strong> doubles memory with a critic. Clipping drops rare-but-important tokens.<br>
-  <strong>SFT on corrections</strong> is off-policy. Forward KL overwrites existing capabilities.</p>
-
-  <h2>Limitations</h2>
-
-  <p>We only get scalar logprobs from the training API, not full distributions — so no exact JSD or forward KL, just a token-level reverse-KL surrogate. No EMA teacher either (no weight-level API access), so the teacher update is instant rather than smoothed. There's optional trust-region regularization that mixes the current teacher with a frozen reference. Credit assignment assumes one tool call per message.</p>
-
-  <h2>Lineage</h2>
-
-  <p>Context distillation (<a href="https://arxiv.org/abs/2112.00861">Askell et al. 2021</a>) showed you can bake prompted behavior into weights. GKD (<a href="https://arxiv.org/abs/2306.13649">Agarwal et al. 2023</a>) showed on-policy distillation fixes the distribution mismatch that breaks SFT. <a href="https://self-distillation.github.io/SDPO">SDPO</a> (Hübotter et al. 2026) used environmental feedback as the teacher's privileged context — 10x faster than GRPO, 7x shorter traces. <a href="https://self-distillation.github.io/SDFT.html">SDFT</a> (Shenfeld et al. 2026) proved self-distillation enables continual learning without catastrophic forgetting.</p>
-
-  <h2>Install</h2>
-
-<pre>pip install continualcode
-export TINKER_API_KEY=&lt;your-key&gt;
-continualcode</pre>
-
-  <p>Flags: <code>enable_training=false</code> for inference only, <code>lora_rank=64</code>, <code>save_every=10</code>.</p>
-
-  <h2>Code</h2>
-
+  <h2>Artifacts</h2>
   <ul>
-    <li><code>train.py</code> — SDPO core: teacher construction, logprob scoring, IS-weighted update</li>
-    <li><code>tui.py</code> — interactive CLI with approve/deny/edit</li>
-    <li><code>tools.py</code> — tool implementations</li>
-    <li><code>benchmarks/auto_train.py</code> — automated LCB evaluation loop</li>
+    <li><code>metrics.jsonl</code></li>
+    <li><code>samples.jsonl</code></li>
+    <li>checkpoint folders in configured <code>checkpoint_dir</code></li>
   </ul>
 
-  <h2>References</h2>
-
+  <h2>Core modules</h2>
   <ul>
-    <li><a href="https://self-distillation.github.io/SDPO">SDPO</a> — Hübotter et al. 2026</li>
-    <li><a href="https://self-distillation.github.io/SDFT.html">SDFT</a> — Shenfeld, Damani, Guestrin 2026</li>
-    <li><a href="https://arxiv.org/abs/2306.13649">GKD</a> — Agarwal et al. 2023</li>
-    <li><a href="./design.md">Design doc</a></li>
-    <li><a href="https://thinkingmachines.ai/tinker">Tinker</a> — training API</li>
+    <li><code>continualcode/benchmarks/auto_train.py</code></li>
+    <li><code>continualcode/modal_train.py</code></li>
+    <li><code>continualcode/model_utils.py</code></li>
+    <li><code>continualcode/sdpo_loss.py</code></li>
   </ul>
-
-  <hr>
-  <div class="foot">
-    <span>&copy; 2026</span>
-    <a href="https://github.com/sdan/continualcode">github</a>
-    <a href="https://x.com/sdand/status/2020592622415548621">tweet</a>
-  </div>
-
-</div>
-
-<script>
-(function(){
-  // Token-level heatmap visualization (inspired by SDPO blog's dense credit assignment figure)
-  // Simulates: agent generated `return list(range(1, n + 1))` and user corrected "don't include n"
-
-  var tokens = ['return',' list','(','range','(','1',',',' n',' +',' 1',')',')'];
-
-  // GRPO: uniform scalar reward — every token gets the same color
-  var grpoEl = document.getElementById('grpo-tokens');
-  if(grpoEl){
-    tokens.forEach(function(t){
-      var s = document.createElement('span');
-      s.className = 'tk';
-      s.style.background = 'rgba(239,68,68,0.12)';
-      s.style.color = '#b91c1c';
-      s.textContent = t;
-      grpoEl.appendChild(s);
-    });
-  }
-
-  // SDPO: per-token advantages — teacher conditioned on "don't include n" disagrees
-  // specifically with the ` + 1` tokens, is neutral on structure tokens
-  var sdpoAdvantages = [0.02, 0.01, 0.0, 0.05, 0.0, 0.03, 0.0, -0.8, -0.95, -0.7, 0.01, 0.0];
-  var sdpoEl = document.getElementById('sdpo-tokens');
-  if(sdpoEl){
-    tokens.forEach(function(t, i){
-      var a = sdpoAdvantages[i];
-      var s = document.createElement('span');
-      s.className = 'tk';
-      if(a < -0.3){
-        // strong disagreement — red
-        var intensity = Math.min(1, Math.abs(a));
-        s.style.background = 'rgba(239,68,68,' + (0.1 + intensity * 0.3) + ')';
-        s.style.color = '#b91c1c';
-      } else if(a > 0.03){
-        // teacher agrees more — blue
-        var intensity = Math.min(1, a * 10);
-        s.style.background = 'rgba(59,130,246,' + (0.08 + intensity * 0.2) + ')';
-        s.style.color = '#1d4ed8';
-      } else {
-        // neutral
-        s.style.background = 'rgba(0,0,0,0.04)';
-        s.style.color = 'rgba(0,0,0,0.35)';
-      }
-      s.textContent = t;
-      sdpoEl.appendChild(s);
-    });
-  }
-})();
-
-(function(){
-  var v = document.getElementById('token-viz');
-  if(!v) return;
-  var o = new IntersectionObserver(function(entries){
-    entries.forEach(function(e){
-      if(e.isIntersecting) e.target.classList.add('visible');
-    });
-  },{threshold:0.2});
-  o.observe(v);
-})();
-</script>
 </body>
 </html>
