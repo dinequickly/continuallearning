@@ -32,6 +32,7 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 from .train import SDPOConfig, ContinualSDPOSession
 from .tools import READONLY_TOOLS, ToolResult, execute_tool
+from .profiles import merge_system_prompt, parse_binary_modes
 
 
 # --- ANSI ---
@@ -273,22 +274,49 @@ def _print_tool_output(text: str, *, max_lines: int = 14) -> None:
         print(f"  {DIM}└─{RESET} {DIM}... (+{more} more lines){RESET}")
 
 
-def _prompt_correction(*, prompt: str, suggested: str | None) -> str:
+def _prompt_correction(
+    *,
+    prompt: str,
+    suggested: str | None,
+    show_shortcuts: bool = True,
+) -> str:
     if suggested:
         _print_system("Suggested (Enter to use):")
         _print_wrapped("", suggested, indent=2)
-    else:
+    elif show_shortcuts:
         _print_system(
             "Keep it short & specific. Shortcuts: f wrong file | r read first | e use edit_lines | t tool error"
         )
+    else:
+        _print_system("Tip: use /m for multiline paste (end with '.') or /e to open $EDITOR.")
     while True:
-        raw = input(prompt).strip()
-        if not raw and suggested:
+        raw = input(prompt)
+        value = raw.strip()
+        if value == "/e":
+            edited = _edit_text_in_editor("")
+            if edited:
+                return edited
+            _print_system("Editor returned empty text.")
+            continue
+        if value == "/m":
+            _print_system("Paste/type multiple lines. End with a single '.' on its own line.")
+            lines: list[str] = []
+            while True:
+                line = input()
+                if line.strip() == ".":
+                    break
+                lines.append(line)
+            block = "\n".join(lines).strip()
+            if block:
+                return block
+            _print_system("Empty text; try again.")
+            continue
+        if not value and suggested:
             return suggested.strip()
-        if raw in CORRECTION_CHIPS:
-            return CORRECTION_CHIPS[raw]
-        if raw:
-            return raw
+        if show_shortcuts and value in CORRECTION_CHIPS:
+            return CORRECTION_CHIPS[value]
+        if value:
+            return value
 
 
 def _select_option(options: list[str], prompt: str = "") -> int:
@@ -364,6 +392,31 @@ def _edit_args_in_editor(args_to_edit: dict[str, Any]) -> dict[str, Any] | None:
                 pass
 
 
+def _edit_text_in_editor(initial_text: str) -> str | None:
+    editor_raw = os.environ.get("EDITOR") or "vim"
+    editor_cmd = shlex.split(editor_raw)
+    tmp_path: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
+            if initial_text:
+                f.write(initial_text)
+                if not initial_text.endswith("\n"):
+                    f.write("\n")
+            tmp_path = f.name
+        subprocess.run([*editor_cmd, tmp_path], check=False)
+        with open(tmp_path, "r", encoding="utf-8") as f:
+            edited = f.read().strip()
+        return edited or None
+    except Exception:
+        return None
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+
 # --- Main loop ---
 
 class ContinualCodeApp:
@@ -378,15 +431,38 @@ class ContinualCodeApp:
     async def _main(self) -> None:
         cfg = self.config
         model = cfg.model_name
+        mode = str(getattr(cfg, "mode", "coding")).strip().lower()
+        if mode not in {"coding", "creative"}:
+            mode = "coding"
+        profile = str(getattr(cfg, "profile", "default")).strip().lower()
         auto_approve_readonly = cfg.auto_approve_readonly
+        sample_timeout_seconds = max(1.0, float(getattr(cfg, "sample_timeout_seconds", 120.0)))
+        train_timeout_seconds = max(1.0, float(getattr(cfg, "train_timeout_seconds", 180.0)))
 
-        print(f"\n{BOLD}continualcode{RESET} {DIM}| {model}{RESET}")
+        print(f"\n{BOLD}continualcode{RESET} {DIM}| {model} | mode={mode} | profile={profile}{RESET}")
         print(f"{DIM}{os.getcwd()}{RESET}")
         last_sdpo_metrics: dict[str, Any] | None = None
 
         print(f"{DIM}initializing...{RESET}", end="", flush=True)
 
         sdpo_config = SDPOConfig(kl_coef=cfg.kl_coef)
+        default_creative_prompt = (
+            "You are a creative writing partner.\n"
+            "Produce vivid, original prose and prioritize voice, imagery, pacing, and emotional resonance.\n"
+            "When the user gives feedback, revise directly toward that feedback without being defensive.\n"
+            "Do not mention internal reasoning."
+        )
+        system_prompt = cfg.system_prompt or (
+            default_creative_prompt if mode == "creative" else None
+        )
+        system_prompt = merge_system_prompt(
+            base_system_prompt=system_prompt,
+            profile=profile,
+            desired_length=getattr(cfg, "desired_length", "medium"),
+            style=getattr(cfg, "style", None),
+            binary_modes=parse_binary_modes(getattr(cfg, "binary_modes", None)),
+        )
+        tool_specs = [] if mode == "creative" else None
         session = ContinualSDPOSession(
             model=model,
             checkpoint=cfg.load_checkpoint_path,
@@ -395,6 +471,8 @@ class ContinualCodeApp:
             tinker_url=cfg.base_url,
             max_tokens=cfg.max_tokens,
             temperature=cfg.temperature,
+            system_prompt=system_prompt,
+            tool_specs=tool_specs,
             enable_training=cfg.enable_training,
             lora_rank=cfg.lora_rank,
             learning_rate=cfg.learning_rate,
@@ -404,6 +482,147 @@ class ContinualCodeApp:
 
         _clear_line()
         print(f"{DIM}ready{RESET}")
+
+        if mode == "creative":
+            _print_system(
+                "Creative mode tips: /m starts multiline input (end with '.') and /e opens $EDITOR."
+            )
+            while True:
+                try:
+                    user_input = input(f"{BLUE}❯{RESET} ").strip()
+                    if user_input == "/m":
+                        _print_system("Paste/type multiple lines. End with a single '.' on its own line.")
+                        lines: list[str] = []
+                        while True:
+                            line = input()
+                            if line.strip() == ".":
+                                break
+                            lines.append(line)
+                        user_input = "\n".join(lines).strip()
+                    elif user_input == "/e":
+                        edited = _edit_text_in_editor("")
+                        user_input = edited.strip() if edited else ""
+                    if not user_input:
+                        continue
+                    if user_input in ("/q", "exit"):
+                        break
+                    if user_input == "/c":
+                        session.clear()
+                        _print_system("Cleared conversation.")
+                        continue
+                    if user_input == "/metrics":
+                        if last_sdpo_metrics:
+                            for k in sorted(last_sdpo_metrics.keys()):
+                                print(f"  {k}: {last_sdpo_metrics[k]}")
+                        else:
+                            _print_system("No training metrics yet.")
+                        continue
+
+                    session.add_user_message(user_input)
+
+                    while True:
+                        print(f"{DIM}thinking...{RESET}", end="", flush=True)
+                        try:
+                            message, ok, completion = await asyncio.wait_for(
+                                session.sample(), timeout=sample_timeout_seconds
+                            )
+                        except asyncio.TimeoutError:
+                            _clear_line()
+                            _print_system(
+                                f"Sampling timed out after {int(sample_timeout_seconds)}s. Try again or /c to clear context."
+                            )
+                            break
+                        _clear_line()
+                        if not ok:
+                            _print_system("Parse failed.")
+                            break
+
+                        text = _extract_text(message).strip()
+                        if not text:
+                            _print_system("Empty response; retrying.")
+                            session.add_user_message("Please answer with prose text.")
+                            continue
+
+                        _print_assistant(text)
+                        session.add_assistant_message(message)
+
+                        choice = _select_option(
+                            ["Accept", "Revise with feedback", "Revise with ideal response"],
+                            prompt="Keep this draft?",
+                        )
+                        if choice == 0:
+                            break
+                        if choice == -1:
+                            break
+
+                        correction: str | None = None
+                        solution: str | None = None
+                        followup_prompt: str | None = None
+
+                        if choice == 1:
+                            correction = _prompt_correction(
+                                prompt=f"{YELLOW}Revision feedback (required){RESET}: ",
+                                suggested=None,
+                                show_shortcuts=False,
+                            )
+                            followup_prompt = (
+                                "Revise the previous draft using this feedback:\n"
+                                f"{correction}"
+                            )
+                        elif choice == 2:
+                            desired_response = _prompt_correction(
+                                prompt=f"{YELLOW}How it should have responded{RESET}: ",
+                                suggested=None,
+                                show_shortcuts=False,
+                            )
+                            correction = (
+                                "Your previous draft missed the target response style/content. "
+                                "Use the provided target response as the demonstration to emulate."
+                            )
+                            solution = desired_response
+                            followup_prompt = (
+                                "Rewrite the previous draft to match the quality, content, and style of this target response:\n"
+                                f"{desired_response}"
+                            )
+
+                        if (
+                            completion is not None
+                            and session.training_client is not None
+                            and correction
+                        ):
+                            session.record_denial(completion, correction, solution=solution)
+                            stop = asyncio.Event()
+                            shimmer_task = asyncio.create_task(_shimmer("training", stop))
+                            try:
+                                metrics = await asyncio.wait_for(
+                                    session.train_sdpo(), timeout=train_timeout_seconds
+                                )
+                            except asyncio.TimeoutError:
+                                metrics = {}
+                                _print_system(
+                                    f"Training timed out after {int(train_timeout_seconds)}s. Continuing without blocking."
+                                )
+                            finally:
+                                stop.set()
+                                await shimmer_task
+                            if metrics:
+                                last_sdpo_metrics = metrics
+                                print(
+                                    f"{CYAN}trained{RESET} {DIM}#{int(metrics.get('sdpo_step',0))} "
+                                    f"L={metrics.get('loss',0.0):.3f} "
+                                    f"kl={metrics.get('sdpo_kl',0.0):.4f} "
+                                    f"t={int(metrics.get('sdpo_tokens',0))}{RESET}"
+                                )
+                        if followup_prompt:
+                            session.add_user_message(followup_prompt)
+                except KeyboardInterrupt:
+                    print()
+                    continue
+                except EOFError:
+                    break
+                except Exception as err:
+                    print(f"{RED}Error: {err}{RESET}")
+            return
 
         last_tool_feedback: str | None = None
         session_allowed_tools: set[str] = set()
@@ -431,7 +650,16 @@ class ContinualCodeApp:
 
                 while True:
                     print(f"{DIM}thinking...{RESET}", end="", flush=True)
-                    message, ok, completion = await session.sample()
+                    try:
+                        message, ok, completion = await asyncio.wait_for(
+                            session.sample(), timeout=sample_timeout_seconds
+                        )
+                    except asyncio.TimeoutError:
+                        _clear_line()
+                        _print_system(
+                            f"Sampling timed out after {int(sample_timeout_seconds)}s. Try again or /c to clear context."
+                        )
+                        break
                     _clear_line()
                     if not ok:
                         _print_system("Parse failed.")
@@ -629,9 +857,18 @@ class ContinualCodeApp:
                             )
                         stop = asyncio.Event()
                         shimmer_task = asyncio.create_task(_shimmer("training", stop))
-                        metrics = await session.train_sdpo()
-                        stop.set()
-                        await shimmer_task
+                        try:
+                            metrics = await asyncio.wait_for(
+                                session.train_sdpo(), timeout=train_timeout_seconds
+                            )
+                        except asyncio.TimeoutError:
+                            metrics = {}
+                            _print_system(
+                                f"Training timed out after {int(train_timeout_seconds)}s. Continuing without blocking."
+                            )
+                        finally:
+                            stop.set()
+                            await shimmer_task
                         if metrics:
                             last_sdpo_metrics = metrics
                             print(

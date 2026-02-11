@@ -12,6 +12,10 @@ dependencies = [
     "tinker>=0.7",
     "tinker-cookbook>=0.1",
     "torch",
+    "datasets",
+    "blobfile",
+    "fastapi",
+    "uvicorn",
 ]
 readme = { file = "README.md", content-type = "text/markdown" }
 license = "MIT"
@@ -32,3 +36,17 @@ Issues = "https://github.com/sdan/continualcode/issues"
 
 [project.scripts]
 continualcode = "continualcode.cli:_entrypoint"
+
+[tool.hatch.build.targets.wheel]
+packages = ["continualcode"]
+include = [
+    "continualcode/web_static/**",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "continualcode/**",
+    "examples/**",
+    "README.md",
+    "pyproject.toml",
+]

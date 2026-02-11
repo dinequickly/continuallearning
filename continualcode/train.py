@@ -13,6 +13,7 @@ Key invariant: teacher and student differ only by the appended feedback.
 from __future__ import annotations
 
 import asyncio
+import difflib
 import logging
 import os
 from dataclasses import dataclass, field
@@ -595,11 +596,8 @@ class ContinualSDPOSession:
             f"Current directory: {os.getcwd()}\n"
         )
 
-        self.tokenizer = get_tokenizer(self.model)
-        # Use model_info to pick the right renderer instead of hardcoding
-        renderer_name = model_info.get_recommended_renderer_name(self.model)
-        logger.info(f"Using renderer: {renderer_name}")
-        self.renderer = get_renderer(renderer_name, tokenizer=self.tokenizer)
+        self.tokenizer: Any = None
+        self.renderer: Any = None
 
         self.service_client = tinker.ServiceClient(base_url=self.tinker_url)
         self.sampling_client: tinker.SamplingClient | None = None
@@ -608,7 +606,7 @@ class ContinualSDPOSession:
         self._teacher_is_student: bool = False
 
         self.messages: list[dict[str, Any]] = []
-        self._prefix = self.renderer.create_conversation_prefix_with_tools(self.tool_specs, self.system_prompt)
+        self._prefix: list[dict[str, Any]] = []
 
         self.sdpo_steps = 0
 
@@ -616,8 +614,46 @@ class ContinualSDPOSession:
         self.sdpo_config = sdpo_config or SDPOConfig()
         self._sdpo_episode: SDPOEpisode | None = None
 
+    @staticmethod
+    def _extract_model_names(supported_models: Any) -> list[str]:
+        names: list[str] = []
+        for item in supported_models or []:
+            if isinstance(item, str):
+                names.append(item)
+                continue
+            model_name = getattr(item, "model_name", None)
+            if isinstance(model_name, str):
+                names.append(model_name)
+        return names
+
+    def _resolve_model_name(self, requested: str, supported_names: list[str]) -> str:
+        if requested in supported_names:
+            return requested
+        if requested == "moonshotai/Kimi-K2.5" and "moonshotai/Kimi-K2-Thinking" in supported_names:
+            logger.warning(
+                "Requested model %s is not currently in server capabilities. Falling back to moonshotai/Kimi-K2-Thinking.",
+                requested,
+            )
+            return "moonshotai/Kimi-K2-Thinking"
+        suggestions = difflib.get_close_matches(requested, supported_names, n=5, cutoff=0.4)
+        hint = f" Closest matches: {', '.join(suggestions)}." if suggestions else ""
+        raise ValueError(
+            f"Model '{requested}' is not available on this Tinker endpoint.{hint}"
+        )
+
     async def init(self) -> None:
         """Initialize the session, setting up training/sampling clients."""
+        capabilities = await self.service_client.get_server_capabilities_async()
+        supported_names = self._extract_model_names(getattr(capabilities, "supported_models", []))
+        if supported_names:
+            self.model = self._resolve_model_name(self.model, supported_names)
+            self.teacher_model = self._resolve_model_name(self.teacher_model, supported_names)
+        self.tokenizer = get_tokenizer(self.model)
+        renderer_name = model_info.get_recommended_renderer_name(self.model)
+        logger.info(f"Using renderer: {renderer_name}")
+        self.renderer = get_renderer(renderer_name, tokenizer=self.tokenizer)
+        self._prefix = self.renderer.create_conversation_prefix_with_tools(self.tool_specs, self.system_prompt)
+
         if self.enable_training:
             # Check for resume from checkpoint
             resume_info = checkpoint_utils.get_last_checkpoint(self.log_path)

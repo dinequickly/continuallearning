@@ -23,3 +23,6 @@ checkpoints/
 
 # misc
 dino-game.js
+
+# local design workspace (not part of runtime app)
+continualcode-web/

@@ -1,0 +1,18 @@
+services:
+  continualcode:
+    build: .
+    image: continualcode-web:latest
+    container_name: continualcode-web
+    restart: unless-stopped
+    environment:
+      TINKER_API_KEY: ${TINKER_API_KEY:?set TINKER_API_KEY in your environment}
+      MODEL_NAME: ${MODEL_NAME:-moonshotai/Kimi-K2.5}
+      PORT: ${PORT:-8765}
+    ports:
+      - "${PORT:-8765}:${PORT:-8765}"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:'+__import__('os').environ.get('PORT','8765')+'/healthz').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s

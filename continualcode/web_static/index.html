@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ContinualCode Web</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark">CC</span>
+        <span>ContinualCode</span>
+      </div>
+      <div>
+        <div class="nav-label">Navigation</div>
+        <nav class="sidebar-nav">
+          <button class="nav-btn active" data-view-target="sessions">Sessions</button>
+          <button class="nav-btn" data-view-target="active">Active Session</button>
+          <button class="nav-btn" data-view-target="training">Training</button>
+        </nav>
+      </div>
+      <div class="sidebar-footer">
+        Shared runtime mode: one Tinker training client + one sampling client across all sessions.
+      </div>
+    </aside>
+
+    <main class="main-shell">
+      <header class="topbar">
+        <span class="workspace-chip">Workspace: Default</span>
+        <div class="topbar-right">
+          <input id="global_search" class="search" type="search" placeholder="Search sessions by id/model..." />
+          <button id="quick_create_btn" class="primary-btn">Create Session</button>
+        </div>
+      </header>
+
+      <div class="views">
+        <section id="view-sessions" class="view active">
+          <div class="view-head">
+            <div>
+              <h1 class="view-title">Sessions</h1>
+              <p class="view-subtitle">Create conversation threads and manage active model sessions.</p>
+            </div>
+            <div class="inline-actions">
+              <button id="sessions_refresh_btn" class="shell-btn">Refresh Sessions</button>
+            </div>
+          </div>
+
+          <div class="layout-grid-2">
+            <article class="card">
+              <h3>Create New Session</h3>
+              <p class="subtitle">Session metadata is per-thread; model weights are shared runtime-wide.</p>
+              <div class="form-grid">
+                <label>Model
+                  <input id="session_model_name" list="model_catalog" value="moonshotai/Kimi-K2.5" placeholder="openai/gpt-oss-120b" />
+                  <datalist id="model_catalog"></datalist>
+                  <span id="session_model_meta" class="subtitle"></span>
+                </label>
+                <label>Mode
+                  <select id="session_mode">
+                    <option value="creative">creative</option>
+                    <option value="coding">coding</option>
+                  </select>
+                </label>
+                <label>Temperature
+                  <input id="session_temperature" value="0.7" />
+                </label>
+                <label>Max Tokens
+                  <input id="session_max_tokens" type="number" min="1" value="4096" />
+                </label>
+                <label>Checkpoint Path
+                  <input id="session_checkpoint" placeholder="tinker://..." />
+                </label>
+                <label>Sample Timeout (s)
+                  <input id="session_sample_timeout" type="number" min="1" placeholder="60" />
+                </label>
+                <label>Train Timeout (s)
+                  <input id="session_train_timeout" type="number" min="1" placeholder="120" />
+                </label>
+                <label>
+                  Enable Training
+                  <select id="session_enable_training">
+                    <option value="true" selected>true</option>
+                    <option value="false">false</option>
+                  </select>
+                </label>
+              </div>
+              <div class="form-grid full">
+                <label>System Prompt
+                  <textarea id="session_system_prompt" placeholder="Manually define the full system instruction for this session."></textarea>
+                </label>
+              </div>
+              <div class="inline-actions">
+                <button id="session_create_btn" class="primary-btn">Create Session</button>
+                <button id="sessions_switch_btn" class="shell-btn">Switch Selected</button>
+                <button id="sessions_delete_btn" class="danger-btn">Delete Selected</button>
+              </div>
+              <div id="active_session_banner" class="session-banner">No active session.</div>
+            </article>
+
+            <article class="card">
+              <h3>Session Registry</h3>
+              <p class="subtitle">All conversation threads share the same checkpoint/runtime.</p>
+              <div class="form-grid full">
+                <label>Active Session
+                  <select id="session_select"></select>
+                </label>
+                <label>Filter
+                  <input id="session_search" placeholder="search by id or model" />
+                </label>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Session ID</th>
+                      <th>Requested</th>
+                      <th>Resolved</th>
+                      <th>Mode</th>
+                      <th>Msgs</th>
+                      <th>Created</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="sessions_table_body"></tbody>
+                </table>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section id="view-active" class="view">
+          <div class="view-head">
+            <div>
+              <h1 class="view-title">Active Session</h1>
+              <p class="view-subtitle">Prompt, review responses, and apply feedback on the shared model.</p>
+            </div>
+            <span id="active_session_chip" class="badge ghost mono">No active session</span>
+          </div>
+
+          <div class="two-col">
+            <article class="card">
+              <h3>Prompt / Feedback Loop</h3>
+              <p class="subtitle">Use revise or ideal response to train the shared runtime checkpoint.</p>
+              <div class="form-grid full">
+                <label>Prompt
+                  <textarea id="active_prompt" placeholder="Enter prompt text..."></textarea>
+                </label>
+              </div>
+              <div class="inline-actions">
+                <button id="send_prompt_btn" class="primary-btn">Generate</button>
+              </div>
+
+              <div class="kicker">Model Response</div>
+              <div id="active_response" class="response-box">Response will appear here.</div>
+
+              <div class="form-grid full">
+                <label>Feedback / Ideal Response
+                  <textarea id="active_feedback" placeholder="feedback or ideal rewrite..."></textarea>
+                </label>
+              </div>
+              <div class="inline-actions">
+                <button id="feedback_accept_btn" class="shell-btn">Accept</button>
+                <button id="feedback_revise_btn" class="shell-btn">Revise With Feedback</button>
+                <button id="feedback_ideal_btn" class="shell-btn">Revise With Ideal Response</button>
+                <button id="active_clear_btn" class="danger-btn">Clear Session</button>
+              </div>
+
+              <div class="kicker">Training Metrics</div>
+              <pre id="active_metrics" class="metrics-box mono">{}</pre>
+            </article>
+
+            <article class="card">
+              <h3>Session Metadata</h3>
+              <p class="subtitle">Thread-level info and shared runtime model state.</p>
+              <div class="meta-grid">
+                <div class="meta-row"><span class="label">Session ID</span><span id="meta_session_id" class="value mono">-</span></div>
+                <div class="meta-row"><span class="label">Requested Model</span><span id="meta_requested_model" class="value">-</span></div>
+                <div class="meta-row"><span class="label">Resolved Model</span><span id="meta_resolved_model" class="value">-</span></div>
+                <div class="meta-row"><span class="label">Mode</span><span id="meta_mode" class="value">-</span></div>
+                <div class="meta-row"><span class="label">Messages</span><span id="meta_messages" class="value">0</span></div>
+                <div class="meta-row"><span class="label">Assistant Messages</span><span id="meta_assistant_messages" class="value">0</span></div>
+                <div class="meta-row"><span class="label">Created</span><span id="meta_created" class="value">-</span></div>
+              </div>
+              <div id="meta_training_badge" class="inline-actions"></div>
+            </article>
+          </div>
+        </section>
+
+        <section id="view-training" class="view">
+          <div class="view-head">
+            <div>
+              <h1 class="view-title">Training</h1>
+              <p class="view-subtitle">Run SFT or DPO jobs and apply resulting checkpoints to shared runtime.</p>
+            </div>
+            <div class="inline-actions">
+              <button id="jobs_refresh_btn" class="shell-btn">Refresh Jobs</button>
+            </div>
+          </div>
+
+          <div class="layout-grid-2">
+            <article class="card">
+              <h3>Train From Examples (LoRA SFT)</h3>
+              <p class="subtitle">Supervised fine-tuning on JSONL examples.</p>
+              <div class="form-grid">
+                <label>Examples JSONL Path
+                  <input id="sft_examples_path" placeholder="/abs/path/examples.jsonl" />
+                </label>
+                <label>Log Path
+                  <input id="sft_log_path" value="/tmp/continualcode/sft-web" />
+                </label>
+                <label>Num Epochs
+                  <input id="sft_epochs" type="number" min="1" value="1" />
+                </label>
+                <label>Learning Rate
+                  <input id="sft_lr" value="0.0001" />
+                </label>
+              </div>
+              <div class="inline-actions">
+                <button id="run_sft_btn" class="primary-btn">Start SFT Job</button>
+              </div>
+              <pre id="sft_job_out" class="log-box mono">No job started.</pre>
+            </article>
+
+            <article class="card">
+              <h3>Train DPO</h3>
+              <p class="subtitle">Preference optimization from chosen/rejected pairs.</p>
+              <div class="form-grid">
+                <label>Preferences JSONL Path
+                  <input id="dpo_pref_path" placeholder="/abs/path/preferences.jsonl" />
+                </label>
+                <label>Log Path
+                  <input id="dpo_log_path" value="/tmp/continualcode/dpo-web" />
+                </label>
+                <label>DPO Beta
+                  <input id="dpo_beta" value="0.1" />
+                </label>
+                <label>Learning Rate
+                  <input id="dpo_lr" value="0.00001" />
+                </label>
+              </div>
+              <div class="inline-actions">
+                <button id="run_dpo_btn" class="primary-btn">Start DPO Job</button>
+              </div>
+              <pre id="dpo_job_out" class="log-box mono">No job started.</pre>
+            </article>
+          </div>
+
+          <article class="card" style="margin-top:14px;">
+            <h3>Job History</h3>
+            <p class="subtitle">Track training jobs and inspect outputs.</p>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Job ID</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="jobs_table_body"></tbody>
+              </table>
+            </div>
+            <div class="kicker">Job Detail</div>
+            <pre id="job_detail" class="log-box mono">Select or run a job to inspect details.</pre>
+          </article>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
