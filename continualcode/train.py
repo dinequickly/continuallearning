@@ -16,8 +16,9 @@ import asyncio
 import difflib
 import logging
 import os
+from datetime import datetime, timezone
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 import tinker
 import torch
@@ -25,7 +26,6 @@ from tinker import types
 from tinker.types.tensor_data import TensorData
 from tinker_cookbook import checkpoint_utils, hyperparam_utils, model_info
 from tinker_cookbook.renderers import get_renderer
-from tinker_cookbook.supervised.common import create_rightshifted_model_input_and_leftshifted_targets
 from tinker_cookbook.tokenizer_utils import get_tokenizer
 
 from .tools import TOOL_SPECS
@@ -34,6 +34,40 @@ from .tools import TOOL_SPECS
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 logger = logging.getLogger(__name__)
+
+try:
+    from tinker_cookbook.supervised.common import (
+        create_rightshifted_model_input_and_leftshifted_targets,
+    )
+except ImportError:
+    # tinker-cookbook API compatibility fallback for older releases.
+    def create_rightshifted_model_input_and_leftshifted_targets(
+        chunks: list[tinker.ModelInputChunk],
+    ) -> tuple[tinker.ModelInput, list[int]]:
+        assert len(chunks) >= 1, "must have at least one chunk"
+
+        last_chunk = chunks[-1]
+        if not isinstance(last_chunk, tinker.types.EncodedTextChunk):
+            raise ValueError(
+                "The last chunk must be a text chunk. Remove trailing non-text chunks first."
+            )
+
+        total_length = sum(c.length for c in chunks)
+        if total_length < 2:
+            raise ValueError("need at least 2 tokens for input/target split")
+
+        input_chunks: list[tinker.ModelInputChunk] = list(chunks[:-1])
+        if last_chunk.length > 1:
+            input_chunks.append(tinker.types.EncodedTextChunk(tokens=last_chunk.tokens[:-1]))
+
+        all_tokens: list[int] = []
+        for chunk in chunks:
+            if isinstance(chunk, tinker.types.EncodedTextChunk):
+                all_tokens.extend(chunk.tokens)
+            else:
+                all_tokens.extend([0] * chunk.length)
+        target_tokens = all_tokens[1:]
+        return tinker.ModelInput(chunks=input_chunks), target_tokens
 
 
 @dataclass
@@ -703,11 +737,42 @@ class ContinualSDPOSession:
         if self._teacher_is_student:
             self.teacher_sampling_client = self.sampling_client
 
+    async def save_checkpoint(
+        self,
+        *,
+        name: str | None = None,
+        kind: Literal["state", "sampler", "both"] = "state",
+    ) -> dict[str, str]:
+        """Save a checkpoint for the current training client and return paths."""
+        if self.training_client is None:
+            raise RuntimeError("Training is not enabled for this session.")
+
+        checkpoint_name = (name or "").strip()
+        if not checkpoint_name:
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+            checkpoint_name = f"manual_{self.sdpo_steps:06d}_{stamp}"
+
+        os.makedirs(self.log_path, exist_ok=True)
+        paths = await checkpoint_utils.save_checkpoint_async(
+            training_client=self.training_client,
+            name=checkpoint_name,
+            log_path=self.log_path,
+            kind=kind,
+            loop_state={"sdpo_steps": self.sdpo_steps},
+            ttl_seconds=self.ttl_seconds,
+        )
+        result = {"name": checkpoint_name, **paths}
+        state_path = paths.get("state_path")
+        if isinstance(state_path, str) and state_path:
+            self.checkpoint = state_path
+        return result
+
     def _maybe_save_checkpoint(self) -> None:
         """Save checkpoint if save_every is set and we've hit the interval."""
         if self.save_every <= 0 or self.training_client is None:
             return
         if self.sdpo_steps > 0 and self.sdpo_steps % self.save_every == 0:
+            os.makedirs(self.log_path, exist_ok=True)
             checkpoint_utils.save_checkpoint(
                 training_client=self.training_client,
                 name=f"{self.sdpo_steps:06d}",
