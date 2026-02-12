@@ -76,9 +76,11 @@ def _print_json(obj: dict[str, object]) -> None:
 
 
 def main(config: Config) -> None:
-    # Require TINKER_API_KEY
+    run_mode = str(config.run_mode or "interactive").strip().lower()
     tinker_api_key = os.environ.get("TINKER_API_KEY")
-    if not tinker_api_key:
+    require_api_key = run_mode != "web"
+
+    if require_api_key and not tinker_api_key:
         print(
             "\033[31mError: TINKER_API_KEY not set.\033[0m\n"
             "\n"
@@ -95,7 +97,7 @@ def main(config: Config) -> None:
             file=sys.stderr,
         )
         sys.exit(1)
-    if not tinker_api_key.startswith("tml-"):
+    if require_api_key and tinker_api_key and not tinker_api_key.startswith("tml-"):
         print(
             "\033[31mError: TINKER_API_KEY format is invalid.\033[0m\n"
             "\n"
@@ -105,8 +107,12 @@ def main(config: Config) -> None:
             file=sys.stderr,
         )
         sys.exit(1)
-
-    run_mode = str(config.run_mode or "interactive").strip().lower()
+    if run_mode == "web" and tinker_api_key and not tinker_api_key.startswith("tml-"):
+        print(
+            "\033[33mWarning: TINKER_API_KEY appears invalid (missing 'tml-' prefix).\033[0m\n"
+            "Web UI will start, but runtime/session creation will fail until a valid key is set.",
+            file=sys.stderr,
+        )
 
     if run_mode in {"train_examples", "bootstrap"}:
         if not config.examples_path:
