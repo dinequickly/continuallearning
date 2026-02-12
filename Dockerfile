@@ -15,7 +15,8 @@ COPY continualcode /app/continualcode
 COPY examples /app/examples
 
 RUN python -m pip install --upgrade pip && \
-    python -m pip install .
+    printf "torch==2.5.1+cpu\n" > /tmp/constraints.txt && \
+    python -m pip install --extra-index-url https://download.pytorch.org/whl/cpu -c /tmp/constraints.txt .
 
 EXPOSE 8765
 
